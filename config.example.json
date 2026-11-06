@@ -1,0 +1,7 @@
+{
+  "notificationChannelId": "",
+  "startHour": 10,
+  "endHour": 18,
+  "interviewMinutes": 60,
+  "optionCount": 6
+}

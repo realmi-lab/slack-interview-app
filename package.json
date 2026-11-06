@@ -1,0 +1,16 @@
+{
+  "name": "slack-interview-availability",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node interview-bot.mjs",
+    "test": "node --test test.mjs"
+  },
+  "dependencies": {
+    "@slack/bolt": "5.1.0"
+  }
+}

@@ -1,0 +1,17 @@
+node_modules/
+data/
+config.json
+setup-status.json
+.env
+.env.*
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.log
+*.pid
+.DS_Store
+snapshots/
+_to_delete/
+outputs/
+tools/keychain-save
