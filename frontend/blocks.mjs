@@ -1,4 +1,4 @@
-import { NUMBER_EMOJI, commonOptions, respondedCount } from './core.mjs';
+import { NUMBER_EMOJI, commonOptions, respondedCount } from '../backend/core.mjs';
 
 // Slack Block Kit 화면: 앱 홈, 조율 시작 창, 조율 메시지
 

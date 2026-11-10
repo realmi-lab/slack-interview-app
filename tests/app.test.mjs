@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { nextMonday, weekLabel, weekSlots, spread, tally, commonOptions, respondedCount } from './core.mjs';
-import { PollStore } from './store.mjs';
-import { homeView, pollModal, pollMessage } from './blocks.mjs';
+import { nextMonday, weekLabel, weekSlots, spread, tally, commonOptions, respondedCount } from '../backend/core.mjs';
+import { PollStore } from '../backend/store.mjs';
 
 const slots = weekSlots('2026-11-09');
 const poll = {
@@ -62,35 +61,21 @@ test('저장소: 확정한 시간은 다음 추천에서 빠짐', () => {
   store.close();
 });
 
-test('조율 메시지: 누른 사람, 모두 가능, 확정·취소 버튼', () => {
-  const votes = [['UA', 'UB', 'UC'], ['UA'], []];
-  const open = pollMessage(poll, votes);
-  const blocks = JSON.stringify(open.blocks);
-  assert.match(open.text, /<@UA> <@UB> <@UC>/);
-  assert.match(blocks, /:two: 월 11\/9 11:00–12:00 {3}<@UA>/);
-  assert.match(blocks, /응답 3\/3명/);
-  assert.match(blocks, /confirm_slot_0/);
-  assert.doesNotMatch(blocks, /confirm_slot_1/);
 
-  const confirmed = JSON.stringify(pollMessage({ ...poll, confirmed: 0 }, votes).blocks);
-  assert.match(confirmed, /📌 \*확정\* :one: 월 11\/9 10:00–11:00/);
-  assert.match(confirmed, /unconfirm_slot/);
-  assert.doesNotMatch(confirmed, /confirm_slot_\d/);
-
-  assert.match(JSON.stringify(pollMessage(poll, [[], [], []]).blocks), /아직 모두 가능한 시간이 없어요/);
-});
-
-test('조율 시작 창과 앱 홈', () => {
-  const view = pollModal({ week: '11/9–11/13', slots, suggested: spread(slots, 6), interviewers: ['UA'], channel: 'C1' });
-  const select = view.blocks.find(b => b.block_id === 'options').element;
-  assert.equal(select.options.length, 30);
-  assert.equal(select.initial_options.length, 6);
-  assert.equal(select.max_selected_items, 10);
-  assert.deepEqual(view.blocks.find(b => b.block_id === 'interviewers').element.initial_users, ['UA']);
-  assert.equal(view.private_metadata, 'C1');
-
-  const empty = pollModal({ week: '11/9–11/13', slots, suggested: [], interviewers: [], channel: 'C1' });
-  assert.equal('initial_users' in empty.blocks[0].element, false);
-  assert.equal('initial_options' in empty.blocks[1].element, false);
-  assert.match(JSON.stringify(homeView('C1')), /open_poll/);
+ test('확정 시 권한·후보 범위·최신 응답을 검사하고 실패하면 저장하지 않음', async () => {
+  const { confirmPoll } = await import('../backend/confirmation.mjs');
+  const store = new PollStore(':memory:'); store.create(poll);
+  let reactions = [{ name: 'one', users: ['UA','UB','UC'] }];
+  const client = { reactions: { get: async () => ({ message: { reactions } }) } };
+  assert.ok(await confirmPoll(store, client, 'C1', '1.0', 'other', 0));
+  assert.ok(await confirmPoll(store, client, 'C1', '1.0', 'U0', -1));
+  assert.ok(await confirmPoll(store, client, 'C1', '1.0', 'U0', 1));
+  assert.equal(store.get('C1','1.0').confirmed, null);
+  assert.equal(await confirmPoll(store, client, 'C1','1.0','U0',0), null);
+  reactions = [];
+  assert.ok(await confirmPoll(store, client, 'C1','1.0','U0',0));
+  assert.equal(store.get('C1','1.0').confirmed, 0);
+  assert.equal(await confirmPoll(store, client, 'C1','1.0','U0',null), null);
+  assert.throws(() => store.setConfirmed('C1','1.0',99), /유효하지/);
+  store.close();
 });

@@ -1,7 +1,7 @@
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
-import { loadRuntime } from '../runtime.mjs';
+import { loadRuntime } from '../backend/runtime.mjs';
 try {
   loadRuntime(dirname(dirname(fileURLToPath(import.meta.url))));
   const db = new DatabaseSync(':memory:'); db.exec('SELECT 1'); db.close();

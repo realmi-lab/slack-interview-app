@@ -31,6 +31,10 @@ export class PollStore {
 
   // index가 null이면 확정 취소
   setConfirmed(channel, ts, index) {
+    const poll = this.get(channel, ts);
+    if (!poll || (index !== null && (!Number.isInteger(index) || index < 0 || index >= poll.options.length))) {
+      throw new Error('유효하지 않은 조율 또는 후보입니다.');
+    }
     this.db.prepare('UPDATE polls SET confirmed = ? WHERE channel = ? AND ts = ?').run(index, channel, ts);
   }
 

@@ -64,7 +64,7 @@
 
 ```mermaid
 flowchart LR
-    S["Slack · 채널 / 앱 홈 / 모달"] -->|"Socket Mode · 명령 / 버튼 / 반응 이벤트"| B["PC/서버 · interview-bot.mjs"]
+    S["Slack · 채널 / 앱 홈 / 모달"] -->|"Socket Mode · 명령 / 버튼 / 반응 이벤트"| B["PC/서버 · backend/app.mjs"]
     B -->|"Web API · 메시지 / 반응 조회 / 화면 갱신"| S
     B <-->|"조율 정보 / 확정 상태"| D["SQLite · data/availability.sqlite"]
     E[".env · 토큰 / 채널 / 시간 설정"] -->|"시작할 때 읽기"| B
@@ -184,7 +184,7 @@ node tools/keychain-setup.mjs
 | `interviewMinutes` | 면접 길이이자 후보 시작 간격 | 기본 60분. 30분 후보가 필요하면 30으로 설정한다. |
 | `optionCount` | 미리 선택해 두는 추천 후보 수 | 1~10의 정수로 설정한다. 보낼 후보도 최대 10개다. |
 
-점심시간 12:30~14:00과 조금이라도 겹치는 후보는 제외합니다. 점심시간과 대상 요일은 현재 `core.mjs`에 정의되어 있으며 설정 파일로 바꾸는 항목은 아닙니다.
+점심시간 12:30~14:00과 조금이라도 겹치는 후보는 제외합니다. 점심시간과 대상 요일은 현재 `backend/core.mjs`에 정의되어 있으며 설정 파일로 바꾸는 항목은 아닙니다.
 
 ### 30분 단위로 쓰기
 
@@ -214,7 +214,7 @@ npm start
 
 Mac이 켜져 있고 프로세스가 실행 중이어야 명령과 응답을 처리합니다. 잠자기·네트워크 단절·프로세스 종료 중에는 응답 처리가 지연되거나 누락될 수 있습니다. 재부팅 후 자동 실행, 별도 상태 확인 HTTP API, 중단 중 누락 이벤트 재집계 기능은 구현하지 않았습니다.
 
-Finder의 `restart.command`로도 재시작할 수 있습니다. 이 파일은 이름이 `interview-bot.mjs`인 프로세스를 찾아 종료하므로, 같은 Mac에서 복사본을 여러 개 운영할 때는 각 터미널에서 대상 프로세스를 직접 종료하고 실행하세요.
+Finder의 `restart.command`로도 재시작할 수 있습니다. 이 파일은 이름이 `backend/app.mjs`인 프로세스를 찾아 종료하므로, 같은 Mac에서 복사본을 여러 개 운영할 때는 각 터미널에서 대상 프로세스를 직접 종료하고 실행하세요.
 
 ### 데이터 백업·복원
 
@@ -241,15 +241,15 @@ SQLite에는 `polls` 테이블을 사용합니다. 채널 ID와 메시지 타임
 
 | 파일 | 역할 |
 | --- | --- |
-| [`interview-bot.mjs`](interview-bot.mjs) | 설정·키체인 읽기, Slack 연결, 명령·모달·이모지·확정 처리 |
-| [`core.mjs`](core.mjs) | 날짜·후보 계산, 추천, 반응 집계, 공통 후보 계산 |
-| [`blocks.mjs`](blocks.mjs) | 앱 홈, 조율 모달, 메시지와 버튼 생성 |
-| [`store.mjs`](store.mjs) | SQLite 조율 정보와 확정 상태 저장 |
+| [`backend/app.mjs`](backend/app.mjs) | 설정·키체인 읽기, Slack 연결, 명령·모달·이모지·확정 처리 |
+| [`backend/core.mjs`](core.mjs) | 날짜·후보 계산, 추천, 반응 집계, 공통 후보 계산 |
+| [`frontend/blocks.mjs`](frontend/blocks.mjs) | 앱 홈, 조율 모달, 메시지와 버튼 생성 |
+| [`backend/store.mjs`](backend/store.mjs) | SQLite 조율 정보와 확정 상태 저장 |
 | [`manifest.json`](manifest.json) | Slack 앱 권한·이벤트·명령 설정 |
 | [`config.example.json`](config.example.json) | 개인 설정을 제외한 설정 예시 |
 | [`tools/keychain-setup.mjs`](tools/keychain-setup.mjs) | 같은 Mac에서만 여는 토큰 입력 화면 |
 | [`tools/keychain-save.swift`](tools/keychain-save.swift) | 입력받은 토큰을 macOS 키체인에 저장 |
-| [`test.mjs`](test.mjs) | 날짜·후보·집계·저장소·화면 구성 테스트 |
+| [`tests/`](tests/) | 날짜·후보·집계·저장소·화면 구성 테스트 |
 | [`restart.command`](restart.command) | 로컬 재시작 보조 스크립트 |
 
 `.gitignore`는 실제 설정, DB, 로그, 운영 상태, 이전 백업, 키체인 저장 도구의 빌드 결과를 제외합니다. 이 자료는 공개 저장소에 추가하지 않습니다.
@@ -290,7 +290,7 @@ SQLite에는 `polls` 테이블을 사용합니다. 채널 ID와 메시지 타임
 npm test
 ```
 
-기존 기능 테스트 7개와 설치 설정 테스트는 다음 주 계산, 점심을 제외한 기본 후보, 추천 분산, 면접관 반응 집계, 확정·취소 저장, 메시지 표시와 모달·앱 홈 구성을 다룹니다. 메모리 SQLite와 가상 Slack 사용자 값을 사용합니다.
+핵심 테스트 9개는 다음 주·후보 계산, 반응 집계, 확정·취소 저장, 확정 시 권한·최신 투표 검증과 .env 설정을 다룹니다. 화면 문구 고정 테스트는 제외합니다. 메모리 SQLite와 가상 Slack 사용자 값을 사용합니다.
 
 테스트 통과는 실제 워크스페이스 설치, 실제 이모지 이벤트 수신, 채널 전달, 모바일 화면 검증을 대신하지 않습니다. 이 문서 업데이트에서는 소스와 매니페스트를 대조하고 기본 60분·선택 가능한 30분 설정의 후보 수를 확인했습니다.
 
@@ -306,6 +306,23 @@ npm start
 
 `package-lock.json`을 함께 배포해 `npm ci`로 동일 버전을 설치합니다. 2026-11-10 npm 레지스트리 기준 `@slack/bolt` 최신 5.1.0을 유지하고 lock의 간접 의존성을 점검했습니다. `npm audit --omit=dev`에서 알려진 취약점은 0건이었습니다. 설치 시점 이후에는 재확인이 필요합니다. [Node.js 환경 파일 문서](https://nodejs.org/api/process.html#processloadenvfilepath)를 참고하세요.
 
-CI는 macOS·Linux·Windows에서 Node.js 22와 24로 `npm ci` 및 테스트를 실행합니다. 로컬 검사는 토큰 없는 환경에서 수행하며 실제 Slack 이벤트·워크스페이스 설치 완료를 의미하지 않습니다. 설치 후 `/interview` → 후보 게시 → 면접관 이모지 응답 → 담당자 확정·취소까지 자신의 워크스페이스에서 확인하세요.
+CI는 Linux에서 Node.js 24로 `npm ci` 및 테스트를 실행합니다. 로컬 검사는 토큰 없는 환경에서 수행하며 실제 Slack 이벤트·워크스페이스 설치 완료를 의미하지 않습니다. 설치 후 `/interview` → 후보 게시 → 면접관 이모지 응답 → 담당자 확정·취소까지 자신의 워크스페이스에서 확인하세요.
 
-설치 검증(2026-11-10): `.env`만 있고 `config.json`은 없는 새 프로세스의 설정 로딩·시간대 적용을 포함해 로컬 테스트 10개 통과. Node.js 22·24로 재검증합니다. `npm run doctor`는 비밀값을 출력하지 않습니다.
+설치 검증(2026-11-10): `.env`만 있고 `config.json`은 없는 새 프로세스의 설정 로딩·시간대 적용을 포함해 로컬 핵심 테스트 9개를 유지합니다. OS·Node 버전 조합을 매번 반복하지 않습니다. `npm run doctor`는 비밀값을 출력하지 않습니다.
+
+## 폴더와 수정 위치
+
+```text
+backend/
+  app.mjs          Slack 명령·이벤트 연결과 실행
+  core.mjs         날짜·후보 생성·투표 집계
+  confirmation.mjs 확정 권한·최신 투표 검증
+  runtime.mjs      .env·선택형 config.json·키체인
+  store.mjs        SQLite 저장
+frontend/
+  blocks.mjs       앱 홈·모달·메시지 화면
+tests/             핵심 회귀 검사
+tools/             설정 검사·선택형 키체인 도구
+```
+
+화면 변경은 frontend, 규칙·설정·저장은 backend에서 시작하세요. 프론트엔드는 Slack Block Kit 화면이며 별도 웹 빌드나 프론트 서버가 없습니다. `npm start`와 루트 `.env`·`data/availability.sqlite` 위치는 유지합니다. 오래된 확정 버튼은 클릭 시 최신 응답을 다시 확인하며, 전원 동의가 사라진 후보와 범위 밖 후보를 저장하지 않습니다.

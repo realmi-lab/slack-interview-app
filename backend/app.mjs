@@ -4,12 +4,13 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { NUMBER_EMOJI, nextMonday, weekLabel, weekSlots, spread, tally, respondedCount } from './core.mjs';
 import { PollStore } from './store.mjs';
-import { homeView, pollModal, pollMessage, mentions } from './blocks.mjs';
+import { homeView, pollModal, pollMessage, mentions } from '../frontend/blocks.mjs';
 
+import { confirmPoll } from './confirmation.mjs';
 import { loadRuntime } from './runtime.mjs';
 
 // ── 설정·저장소 ──
-const root = dirname(fileURLToPath(import.meta.url));
+const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const { config, tokens } = loadRuntime(root);
 mkdirSync(join(root, 'data'), { recursive: true, mode: 0o700 });
 const store = new PollStore(join(root, 'data', 'availability.sqlite'));
@@ -101,11 +102,11 @@ async function setConfirmed({ body, ack, client }, index) {
   const ts = body.container.message_ts;
   const poll = store.get(channel, ts);
   if (!poll) return;
-  if (body.user.id !== poll.organizer) {
-    await client.chat.postEphemeral({ channel, user: body.user.id, text: '조율을 요청한 사람만 확정할 수 있어요.' });
+  const error = await confirmPoll(store, client, channel, ts, body.user.id, index);
+  if (error) {
+    await client.chat.postEphemeral({ channel, user: body.user.id, text: error });
     return;
   }
-  store.setConfirmed(channel, ts, index);
   await refresh(client, channel, ts);
   const text = index === null ? '확정을 취소했어요.' : `📌 면접 확정: ${poll.options[index].label}\n${mentions(poll.interviewers)}`;
   await client.chat.postMessage({ channel, thread_ts: ts, text });
