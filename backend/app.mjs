@@ -1,27 +1,22 @@
-import { App } from '@slack/bolt';
+import { createApp } from './slack.mjs';
 import { mkdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { NUMBER_EMOJI, nextMonday, weekLabel, weekSlots, spread, tally, respondedCount } from './core.mjs';
 import { PollStore } from './store.mjs';
 import { homeView, pollModal, pollMessage, mentions } from '../frontend/blocks.mjs';
 
 import { confirmPoll } from './confirmation.mjs';
-import { loadRuntime } from './runtime.mjs';
+import { loadRuntime } from './config.mjs';
 
 // ── 설정·저장소 ──
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const { config, tokens } = loadRuntime(root);
-mkdirSync(join(root, 'data'), { recursive: true, mode: 0o700 });
-const store = new PollStore(join(root, 'data', 'availability.sqlite'));
+const { config, tokens, sqlitePath } = loadRuntime(root);
+mkdirSync(dirname(sqlitePath), { recursive: true, mode: 0o700 });
+const store = new PollStore(sqlitePath);
 
-// ── Slack 연결 (Socket Mode, 토큰은 macOS 키체인) ──
-const app = new App({
-  ...tokens,
-  socketMode: true,
-  logLevel: 'error',
-  clientOptions: { retryConfig: { retries: 0 } },
-});
+// ── Slack 연결 (두 앱 모두 .env + Socket Mode) ──
+const app = createApp(tokens);
 
 // ── 조율 시작: /interview 또는 앱 홈 버튼 ──
 // 다음 주 후보 중 확정된 면접 시간을 빼고, 한 주에 고르게 추천한다

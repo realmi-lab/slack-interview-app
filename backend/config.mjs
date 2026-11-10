@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { join, resolve } from 'node:path';
+import { readTokens } from './slack.mjs';
 import { loadEnvFile } from 'node:process';
 
 export function loadConfig(root, env = process.env) {
@@ -10,8 +10,8 @@ export function loadConfig(root, env = process.env) {
   for (const [key, name] of Object.entries({ startHour: 'START_HOUR', endHour: 'END_HOUR', interviewMinutes: 'INTERVIEW_MINUTES', optionCount: 'OPTION_COUNT' })) {
     if (env[name]?.trim()) config[key] = Number(env[name]);
   }
-  config.notificationChannelId = env.SLACK_NOTIFICATION_CHANNEL?.trim() || config.notificationChannelId || '';
-  if (!/^[CG][A-Z0-9]+$/.test(config.notificationChannelId)) throw new Error('SLACK_NOTIFICATION_CHANNEL 또는 config.json의 notificationChannelId에 실제 채널 ID를 입력하세요.');
+  config.notificationChannelId = (env.SLACK_NOTIFY_CHANNEL || env.SLACK_NOTIFICATION_CHANNEL)?.trim() || config.notificationChannelId || '';
+  if (!/^[CG][A-Z0-9]+$/.test(config.notificationChannelId)) throw new Error('SLACK_NOTIFY_CHANNEL 또는 config.json의 notificationChannelId에 실제 채널 ID를 입력하세요.');
   for (const [key, min, max] of [['startHour', 0, 23], ['endHour', 1, 24], ['interviewMinutes', 1, 480], ['optionCount', 1, 10]]) {
     if (!Number.isInteger(config[key]) || config[key] < min || config[key] > max) throw new Error(`${key}: ${min}~${max} 범위의 정수가 필요합니다.`);
   }
@@ -25,20 +25,13 @@ export function loadConfig(root, env = process.env) {
   return config;
 }
 
-export function readTokens(env = process.env, platform = process.platform, readKeychain = service => execFileSync('/usr/bin/security', ['find-generic-password', '-s', service, '-w'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()) {
-  const get = (name, service, prefix) => {
-    let value = env[name]?.trim();
-    if (!value && platform === 'darwin') {
-      try { value = readKeychain(service); } catch { /* Give a token-free setup error below. */ }
-    }
-    if (!value?.startsWith(prefix) || /\s/.test(value)) throw new Error(`${name}을 .env에 입력하세요. macOS에서는 기존 키체인도 사용할 수 있습니다.`);
-    return value;
-  };
-  return { token: get('SLACK_BOT_TOKEN', 'slack-interview-bot-token', 'xoxb-'), appToken: get('SLACK_APP_TOKEN', 'slack-interview-app-token', 'xapp-') };
-}
-
 export function loadRuntime(root) {
   const envFile = join(root, '.env');
   if (existsSync(envFile)) loadEnvFile(envFile); // Existing process environment takes precedence.
-  return { config: loadConfig(root), tokens: readTokens() };
+  const timezone = (process.env.APP_TIMEZONE || process.env.TZ || 'Asia/Seoul').trim();
+  try { new Intl.DateTimeFormat('en', { timeZone: timezone }); }
+  catch { throw new Error('APP_TIMEZONE: 유효한 IANA 시간대가 필요합니다.'); }
+  process.env.TZ = timezone;
+  return { config: loadConfig(root), tokens: readTokens(),
+    sqlitePath: resolve(root, process.env.SQLITE_PATH?.trim() || 'data/availability.sqlite') };
 }

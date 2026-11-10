@@ -1,5 +1,7 @@
 # 면접 일정 Slack 앱
 
+두 앱의 공통 설정·설치 흐름은 [Slack 공통 설정](docs/SLACK_SETUP.md)을 따릅니다.
+
 면접관에게 각각 전화해 가능한 시간을 묻는 과정을 Slack 채널의 일정 조율 메시지 하나로 모으는 앱입니다. 담당자가 후보 시간을 보내면 면접관이 번호 이모지로 응답하고, 모두 가능한 시간을 담당자가 확정합니다.
 
 이 문서는 프로젝트 배경, 현재 구현, 사용법, 설치, 설정, 데이터 구조, 운영 방법과 제한을 한곳에 정리합니다. **2026-11-06 공개 소스 기준**이며 실제 운영 설정과 개인 데이터는 포함하지 않습니다.
@@ -83,7 +85,7 @@ flowchart LR
 - 대상 Slack 워크스페이스에 앱을 만들고 설치할 수 있는 권한.
 - 봇이 참여할 채널과 그 채널의 ID. 비공개 채널도 봇을 초대해 사용합니다.
 
-토큰은 실행 환경변수 또는 저장소의 `.env`에서 읽습니다. macOS에서는 환경변수에 없는 토큰만 기존 키체인에서 읽습니다. 우선순위는 **실행 환경변수 → .env → Mac 키체인**입니다. `config.json`은 기존 설치 호환용이며 새 설치에는 필요하지 않습니다.
+토큰은 실행 환경변수 또는 저장소의 `.env`에서 읽습니다. 기본 우선순위는 **실행 환경변수 → .env → 기본값**입니다. Mac 키체인은 `SLACK_TOKEN_SOURCE=keychain`을 명시했을 때만 환경변수에 없는 토큰을 읽습니다. `config.json`은 기존 설치 호환용이며 새 설치에는 필요하지 않습니다. `SQLITE_PATH`는 기본 `./data/availability.sqlite`이며 상대 경로는 저장소 루트 기준입니다.
 
 ### 4-1. 소스 받기
 
@@ -100,8 +102,8 @@ cp .env.example .env
 ```dotenv
 SLACK_BOT_TOKEN=여기에_봇_토큰
 SLACK_APP_TOKEN=여기에_앱_토큰
-SLACK_NOTIFICATION_CHANNEL=C0123456789
-TZ=Asia/Seoul
+SLACK_NOTIFY_CHANNEL=C0123456789
+APP_TIMEZONE=Asia/Seoul
 START_HOUR=10
 END_HOUR=18
 INTERVIEW_MINUTES=60
@@ -123,7 +125,7 @@ OPTION_COUNT=6
 
 ### 4-3. .env 설정 확인 · Mac 키체인은 선택
 
-기본 설치는 `.env`에 `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_NOTIFICATION_CHANNEL`을 입력하면 끝입니다. 다음 명령은 설정 형식·토큰 존재·내장 SQLite를 검사하며 Slack으로 연결하거나 메시지를 보내지 않습니다.
+기본 설치는 `.env`에 `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_NOTIFY_CHANNEL`을 입력하면 끝입니다. 다음 명령은 설정 형식·토큰 존재·내장 SQLite를 검사하며 Slack으로 연결하거나 메시지를 보내지 않습니다.
 
 ```sh
 npm run doctor
@@ -132,7 +134,7 @@ npm start
 
 `doctor` 오류는 종료 코드 1입니다. 토큰이 유효한지와 권한·채널 참여 여부는 실제 Slack 연결 후 확인해야 합니다. `.env`와 운영 DB는 Git에서 제외되며 `.env.example`만 공개됩니다.
 
-Mac 키체인을 선호하는 기존 사용자는 `.env`의 토큰을 비우고 다음 선택 절차를 사용할 수 있습니다.
+Mac 키체인을 선호하는 기존 사용자는 `.env`에 `SLACK_TOKEN_SOURCE=keychain`을 적고 토큰을 비운 뒤 다음 선택 절차를 사용할 수 있습니다. 기본 설치에서는 이 절차가 필요하지 않습니다.
 
 ```sh
 xcrun swiftc tools/keychain-save.swift -o tools/keychain-save
@@ -210,7 +212,7 @@ npm run doctor
 npm start
 ```
 
-`Slack 연결 완료 · 면접 일정 조율 봇`이 출력되는지 확인합니다. 종료는 실행 중인 터미널에서 `Ctrl+C`를 누릅니다. `.env`의 `TZ=Asia/Seoul`도 로드됩니다. 설정을 바꾸면 종료한 뒤 다시 실행합니다.
+`Slack 연결 완료 · 면접 일정 조율 봇`이 출력되는지 확인합니다. 종료는 실행 중인 터미널에서 `Ctrl+C`를 누릅니다. `.env`의 `APP_TIMEZONE=Asia/Seoul`도 로드됩니다. 설정을 바꾸면 종료한 뒤 다시 실행합니다.
 
 Mac이 켜져 있고 프로세스가 실행 중이어야 명령과 응답을 처리합니다. 잠자기·네트워크 단절·프로세스 종료 중에는 응답 처리가 지연되거나 누락될 수 있습니다. 재부팅 후 자동 실행, 별도 상태 확인 HTTP API, 중단 중 누락 이벤트 재집계 기능은 구현하지 않았습니다.
 
@@ -218,7 +220,7 @@ Finder의 `restart.command`로도 재시작할 수 있습니다. 이 파일은 �
 
 ### 데이터 백업·복원
 
-프로세스를 정상 종료한 뒤 `data/availability.sqlite`를 비공개 위치에 복사해 백업합니다. 복원할 때도 프로세스를 종료하고 해당 파일을 되돌린 다음 실행합니다. `.env`, 선택형 키체인 토큰·`config.json`은 DB와 별도입니다. `.env`도 비공개로 백업하세요.
+프로세스를 정상 종료한 뒤 `SQLITE_PATH` 파일(기본 `data/availability.sqlite`)을 비공개 위치에 복사해 백업합니다. 복원할 때도 프로세스를 종료하고 해당 파일을 되돌린 다음 실행합니다. `.env`, 선택형 키체인 토큰·`config.json`은 DB와 별도입니다. `.env`도 비공개로 백업하세요.
 
 DB를 복원해도 삭제된 Slack 메시지나 제거된 이모지 반응이 되살아나지는 않습니다. 반대로 DB를 잃으면 Slack에 메시지가 남아 있어도 그 메시지를 기존 조율로 처리할 수 없습니다.
 
@@ -242,7 +244,7 @@ SQLite에는 `polls` 테이블을 사용합니다. 채널 ID와 메시지 타임
 | 파일 | 역할 |
 | --- | --- |
 | [`backend/app.mjs`](backend/app.mjs) | 설정·키체인 읽기, Slack 연결, 명령·모달·이모지·확정 처리 |
-| [`backend/core.mjs`](core.mjs) | 날짜·후보 계산, 추천, 반응 집계, 공통 후보 계산 |
+| [`backend/core.mjs`](backend/core.mjs) | 날짜·후보 계산, 추천, 반응 집계, 공통 후보 계산 |
 | [`frontend/blocks.mjs`](frontend/blocks.mjs) | 앱 홈, 조율 모달, 메시지와 버튼 생성 |
 | [`backend/store.mjs`](backend/store.mjs) | SQLite 조율 정보와 확정 상태 저장 |
 | [`manifest.json`](manifest.json) | Slack 앱 권한·이벤트·명령 설정 |
@@ -317,7 +319,8 @@ backend/
   app.mjs          Slack 명령·이벤트 연결과 실행
   core.mjs         날짜·후보 생성·투표 집계
   confirmation.mjs 확정 권한·최신 투표 검증
-  runtime.mjs      .env·선택형 config.json·키체인
+  config.mjs       .env·시간대·DB 경로·선택형 config.json
+  slack.mjs        토큰 확인·Socket Mode 연결
   store.mjs        SQLite 저장
 frontend/
   blocks.mjs       앱 홈·모달·메시지 화면
