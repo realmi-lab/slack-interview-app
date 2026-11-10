@@ -64,24 +64,26 @@
 
 ```mermaid
 flowchart LR
-    S["Slack · 채널 / 앱 홈 / 모달"] -->|"Socket Mode · 명령 / 버튼 / 반응 이벤트"| B["Mac · interview-bot.mjs"]
+    S["Slack · 채널 / 앱 홈 / 모달"] -->|"Socket Mode · 명령 / 버튼 / 반응 이벤트"| B["PC/서버 · interview-bot.mjs"]
     B -->|"Web API · 메시지 / 반응 조회 / 화면 갱신"| S
     B <-->|"조율 정보 / 확정 상태"| D["SQLite · data/availability.sqlite"]
-    K["macOS 키체인"] -->|"시작할 때 토큰 읽기"| B
+    E[".env · 토큰 / 채널 / 시간 설정"] -->|"시작할 때 읽기"| B
+    K["macOS 키체인 · 선택"] -->|"환경변수에 없는 토큰만 읽기"| B
 ```
 
-면접관은 Slack에서만 응답합니다. 설치 과정의 `127.0.0.1` 주소는 이 Mac에서 토큰을 키체인에 저장할 때 잠시 여는 입력 화면이며, 면접관에게 배포하는 주소가 아닙니다.
+면접관은 Slack에서만 응답합니다. 설치 과정의 `127.0.0.1` 주소는 이 Mac에서 선택형 Mac 키체인 저장 도구를 사용할 때 잠시 여는 입력 화면이며, 면접관에게 배포하는 주소가 아닙니다.
 
 ## 4. 설치와 Slack 연결
 
 ### 준비물
 
-- macOS와 Node.js 22.13 이상: `package.json`의 실행 기준입니다.
-- Swift 컴파일러를 사용할 수 있는 Xcode Command Line Tools: 키체인 저장 도구를 빌드할 때 필요합니다.
+- Node.js 22.13 이상과 npm 9.6.4 이상, Git. 새 설치는 Node.js 24 LTS를 권장합니다. macOS·Linux·Windows에서 `.env`로 실행합니다.
+- 쓰기 가능한 로컬 디스크(SQLite)와 계속 켜 둘 PC/서버. 외부 DB·AI 키·캘린더 계정·공개 도메인은 필요하지 않습니다.
+- Mac 키체인을 선택할 때만 Swift/Xcode Command Line Tools가 필요합니다.
 - 대상 Slack 워크스페이스에 앱을 만들고 설치할 수 있는 권한.
 - 봇이 참여할 채널과 그 채널의 ID. 비공개 채널도 봇을 초대해 사용합니다.
 
-현재 실행 코드는 macOS의 `/usr/bin/security`로 토큰을 읽습니다. 다른 운영체제의 토큰 저장 방식은 구현하지 않았습니다.
+토큰은 실행 환경변수 또는 저장소의 `.env`에서 읽습니다. macOS에서는 환경변수에 없는 토큰만 기존 키체인에서 읽습니다. 우선순위는 **실행 환경변수 → .env → Mac 키체인**입니다. `config.json`은 기존 설치 호환용이며 새 설치에는 필요하지 않습니다.
 
 ### 4-1. 소스 받기
 
@@ -89,10 +91,24 @@ flowchart LR
 git clone https://github.com/realmi-lab/slack-interview-app.git
 cd slack-interview-app
 npm ci
-cp config.example.json config.json
+cp .env.example .env
+# Windows PowerShell: Copy-Item .env.example .env
 ```
 
-`config.json`의 `notificationChannelId`에 앱 홈에서 시작한 조율을 올릴 채널 ID를 입력합니다. 나머지 설정은 다음 절을 참고하세요.
+`.env`에 아래 값을 입력하세요. 토큰 두 개와 봇을 초대한 채널 ID가 필수이며, 나머지는 운영 시간 설정입니다. Linux/macOS에서는 `chmod 600 .env`를 실행하세요.
+
+```dotenv
+SLACK_BOT_TOKEN=여기에_봇_토큰
+SLACK_APP_TOKEN=여기에_앱_토큰
+SLACK_NOTIFICATION_CHANNEL=C0123456789
+TZ=Asia/Seoul
+START_HOUR=10
+END_HOUR=18
+INTERVIEW_MINUTES=60
+OPTION_COUNT=6
+```
+
+시간은 정수로 입력합니다. `START_HOUR`는 0~23, `END_HOUR`는 1~24이며 종료가 시작보다 늦어야 합니다. `INTERVIEW_MINUTES`는 1~480, `OPTION_COUNT`는 1~10입니다. 점심을 제외한 후보가 하나도 없으면 시작을 거절합니다. Slack 토큰·채널은 아래 단계에서 준비합니다.
 
 ### 4-2. Slack 앱 만들기
 
@@ -105,9 +121,18 @@ cp config.example.json config.json
 
 매니페스트로 앱을 만드는 절차는 [Slack App manifests 공식 문서](https://docs.slack.dev/app-manifests/)에서 확인할 수 있습니다. 권한을 나중에 바꿨다면 워크스페이스에 다시 설치하고 유효한 봇 토큰을 사용하세요.
 
-### 4-3. 토큰을 Mac 키체인에 저장하기
+### 4-3. .env 설정 확인 · Mac 키체인은 선택
 
-프로젝트 폴더에서 다음을 실행합니다.
+기본 설치는 `.env`에 `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, `SLACK_NOTIFICATION_CHANNEL`을 입력하면 끝입니다. 다음 명령은 설정 형식·토큰 존재·내장 SQLite를 검사하며 Slack으로 연결하거나 메시지를 보내지 않습니다.
+
+```sh
+npm run doctor
+npm start
+```
+
+`doctor` 오류는 종료 코드 1입니다. 토큰이 유효한지와 권한·채널 참여 여부는 실제 Slack 연결 후 확인해야 합니다. `.env`와 운영 DB는 Git에서 제외되며 `.env.example`만 공개됩니다.
+
+Mac 키체인을 선호하는 기존 사용자는 `.env`의 토큰을 비우고 다음 선택 절차를 사용할 수 있습니다.
 
 ```sh
 xcrun swiftc tools/keychain-save.swift -o tools/keychain-save
@@ -139,7 +164,7 @@ node tools/keychain-setup.mjs
 
 ## 5. 시간과 후보 설정
 
-기본 [`config.example.json`](config.example.json)은 다음과 같습니다. 실제 채널 ID를 넣은 `config.json`은 공개 저장소에서 제외합니다.
+기본 [`config.example.json`](config.example.json)은 다음과 같습니다. 새 설치는 `.env`만 사용하세요. 기존 `config.json`도 읽으며 같은 항목의 환경변수가 있으면 환경변수가 우선합니다.
 
 ```json
 {
@@ -151,7 +176,7 @@ node tools/keychain-setup.mjs
 }
 ```
 
-| 키 | 뜻 | 설정 기준 |
+| config.json 키 (선택) | 뜻 | 설정 기준 |
 | --- | --- | --- |
 | `notificationChannelId` | 앱 홈에서 시작할 때 메시지를 올릴 채널 | 봇이 참여한 실제 채널의 ID를 입력한다. |
 | `startHour` | 하루 후보 시작 시각 | 기본 10시. |
@@ -163,7 +188,7 @@ node tools/keychain-setup.mjs
 
 ### 30분 단위로 쓰기
 
-`config.json`에서 `interviewMinutes`를 `30`으로 바꾸고 프로세스를 재시작합니다. 다른 기본값을 유지하면 생성 결과는 다음과 같습니다.
+`.env`에서 `INTERVIEW_MINUTES=30`으로 바꾸고 프로세스를 재시작합니다. 다른 기본값을 유지하면 생성 결과는 다음과 같습니다.
 
 | 설정 | 오전 | 오후 | 하루 / 한 주 후보 수 |
 | --- | --- | --- | --- |
@@ -181,10 +206,11 @@ node tools/keychain-setup.mjs
 한국 시간으로 실행하는 예입니다.
 
 ```sh
-TZ=Asia/Seoul npm start
+npm run doctor
+npm start
 ```
 
-`Slack 연결 완료 · 면접 일정 조율 봇`이 출력되는지 확인합니다. 종료는 실행 중인 터미널에서 `Ctrl+C`를 누릅니다. 설정을 바꾸면 종료한 뒤 다시 실행합니다.
+`Slack 연결 완료 · 면접 일정 조율 봇`이 출력되는지 확인합니다. 종료는 실행 중인 터미널에서 `Ctrl+C`를 누릅니다. `.env`의 `TZ=Asia/Seoul`도 로드됩니다. 설정을 바꾸면 종료한 뒤 다시 실행합니다.
 
 Mac이 켜져 있고 프로세스가 실행 중이어야 명령과 응답을 처리합니다. 잠자기·네트워크 단절·프로세스 종료 중에는 응답 처리가 지연되거나 누락될 수 있습니다. 재부팅 후 자동 실행, 별도 상태 확인 HTTP API, 중단 중 누락 이벤트 재집계 기능은 구현하지 않았습니다.
 
@@ -192,7 +218,7 @@ Finder의 `restart.command`로도 재시작할 수 있습니다. 이 파일은 �
 
 ### 데이터 백업·복원
 
-프로세스를 정상 종료한 뒤 `data/availability.sqlite`를 비공개 위치에 복사해 백업합니다. 복원할 때도 프로세스를 종료하고 해당 파일을 되돌린 다음 실행합니다. 키체인 토큰과 `config.json`은 DB와 별도입니다.
+프로세스를 정상 종료한 뒤 `data/availability.sqlite`를 비공개 위치에 복사해 백업합니다. 복원할 때도 프로세스를 종료하고 해당 파일을 되돌린 다음 실행합니다. `.env`, 선택형 키체인 토큰·`config.json`은 DB와 별도입니다. `.env`도 비공개로 백업하세요.
 
 DB를 복원해도 삭제된 Slack 메시지나 제거된 이모지 반응이 되살아나지는 않습니다. 반대로 DB를 잃으면 Slack에 메시지가 남아 있어도 그 메시지를 기존 조율로 처리할 수 없습니다.
 
@@ -264,6 +290,22 @@ SQLite에는 `polls` 테이블을 사용합니다. 채널 ID와 메시지 타임
 npm test
 ```
 
-현재 테스트 7개는 다음 주 계산, 점심을 제외한 기본 후보, 추천 분산, 면접관 반응 집계, 확정·취소 저장, 메시지 표시와 모달·앱 홈 구성을 다룹니다. 메모리 SQLite와 가상 Slack 사용자 값을 사용합니다.
+기존 기능 테스트 7개와 설치 설정 테스트는 다음 주 계산, 점심을 제외한 기본 후보, 추천 분산, 면접관 반응 집계, 확정·취소 저장, 메시지 표시와 모달·앱 홈 구성을 다룹니다. 메모리 SQLite와 가상 Slack 사용자 값을 사용합니다.
 
 테스트 통과는 실제 워크스페이스 설치, 실제 이모지 이벤트 수신, 채널 전달, 모바일 화면 검증을 대신하지 않습니다. 이 문서 업데이트에서는 소스와 매니페스트를 대조하고 기본 60분·선택 가능한 30분 설정의 후보 수를 확인했습니다.
+
+## 새 설치 검증과 의존성 관리
+
+```sh
+node --version
+npm ci
+npm test
+npm run doctor
+npm start
+```
+
+`package-lock.json`을 함께 배포해 `npm ci`로 동일 버전을 설치합니다. 2026-11-10 npm 레지스트리 기준 `@slack/bolt` 최신 5.1.0을 유지하고 lock의 간접 의존성을 점검했습니다. `npm audit --omit=dev`에서 알려진 취약점은 0건이었습니다. 설치 시점 이후에는 재확인이 필요합니다. [Node.js 환경 파일 문서](https://nodejs.org/api/process.html#processloadenvfilepath)를 참고하세요.
+
+CI는 macOS·Linux·Windows에서 Node.js 22와 24로 `npm ci` 및 테스트를 실행합니다. 로컬 검사는 토큰 없는 환경에서 수행하며 실제 Slack 이벤트·워크스페이스 설치 완료를 의미하지 않습니다. 설치 후 `/interview` → 후보 게시 → 면접관 이모지 응답 → 담당자 확정·취소까지 자신의 워크스페이스에서 확인하세요.
+
+설치 검증(2026-11-10): `.env`만 있고 `config.json`은 없는 새 프로세스의 설정 로딩·시간대 적용을 포함해 로컬 테스트 10개 통과. Node.js 22·24로 재검증합니다. `npm run doctor`는 비밀값을 출력하지 않습니다.

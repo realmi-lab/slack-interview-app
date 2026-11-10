@@ -8,7 +8,8 @@
   },
   "scripts": {
     "start": "node interview-bot.mjs",
-    "test": "node --test test.mjs"
+    "test": "node --test test.mjs runtime.test.mjs",
+    "doctor": "node tools/doctor.mjs"
   },
   "dependencies": {
     "@slack/bolt": "5.1.0"

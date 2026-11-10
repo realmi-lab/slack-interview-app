@@ -15,3 +15,5 @@ snapshots/
 _to_delete/
 outputs/
 tools/keychain-save
+
+!.env.example

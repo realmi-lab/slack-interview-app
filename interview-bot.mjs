@@ -1,23 +1,22 @@
 import { App } from '@slack/bolt';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { NUMBER_EMOJI, nextMonday, weekLabel, weekSlots, spread, tally, respondedCount } from './core.mjs';
 import { PollStore } from './store.mjs';
 import { homeView, pollModal, pollMessage, mentions } from './blocks.mjs';
 
+import { loadRuntime } from './runtime.mjs';
+
 // ── 설정·저장소 ──
 const root = dirname(fileURLToPath(import.meta.url));
-const config = JSON.parse(readFileSync(join(root, 'config.json'), 'utf8'));
+const { config, tokens } = loadRuntime(root);
 mkdirSync(join(root, 'data'), { recursive: true, mode: 0o700 });
 const store = new PollStore(join(root, 'data', 'availability.sqlite'));
 
 // ── Slack 연결 (Socket Mode, 토큰은 macOS 키체인) ──
-const keychain = service => execFileSync('/usr/bin/security', ['find-generic-password', '-s', service, '-w'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
 const app = new App({
-  token: keychain('slack-interview-bot-token'),
-  appToken: keychain('slack-interview-app-token'),
+  ...tokens,
   socketMode: true,
   logLevel: 'error',
   clientOptions: { retryConfig: { retries: 0 } },
